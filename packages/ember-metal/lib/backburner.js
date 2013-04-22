@@ -8,23 +8,30 @@ X waterfall
 X handle nested runloops
 X autorun
 X debounce
-- string methods
-- coalesce laters/nexts
+X coalesce laters/nexts
+X cancel
+X string methods
+X hasScheduledTimers
+- better waterfall implementation - cache length, check prior, then compare new length and rerun
+- ability to wrap flushes (options) - queue.aroundFlush = Ember.changeProperties
+== TESTS WILL PASS ==
+- cancel debounces?
+- don't create arrays for actions, push a tuple
 - try/finally bullshit
-- ability to wrap flush - queue.aroundFlush = Ember.changeProperties
-- sync?
-- hasScheduledTimers
-- cancel
-- perfs?
 - only tag stack in dev mode
+- sync?
+- perfs?
+- clean up string methods handling code?
+- merge timers and debouncees arrays?
 */
 
 var slice = [].slice,
     pop = [].pop,
     DeferredActionQueues;
 
-var Backburner = Ember.Backburner = function(queueNames) {
+var Backburner = Ember.Backburner = function(queueNames, options) {
   this.queueNames = queueNames;
+  this.options = options || {};
 };
 
 function createAutorun(backburner) {
@@ -36,6 +43,7 @@ function createAutorun(backburner) {
 
 Backburner.prototype = {
   queueNames: null,
+  options: null,
   currentInstance: null,
   previousInstance: null,
 
@@ -43,7 +51,7 @@ Backburner.prototype = {
     if (this.currentInstance) {
       this.previousInstance = this.currentInstance;
     }
-    this.currentInstance = new DeferredActionQueues(this.queueNames);
+    this.currentInstance = new DeferredActionQueues(this.queueNames, this.options);
   },
 
   end: function() {
@@ -245,14 +253,14 @@ function executeTimers(self) {
   }
 }
 
-DeferredActionQueues = function(queueNames) {
+DeferredActionQueues = function(queueNames, options) {
   var queues = this.queues = {};
   this.queueNames = queueNames = queueNames || [];
 
   var queueName;
   for (var i = 0, l = queueNames.length; i < l; i++) {
     queueName = queueNames[i];
-    queues[queueName] = new Queue(queueName);
+    queues[queueName] = new Queue(queueName, options[queueName]);
   }
 };
 
@@ -276,6 +284,7 @@ DeferredActionQueues.prototype = {
   },
 
   flush: function() {
+    // TODO: rewrite this
     while(!this.next()) {}
   },
 
@@ -308,13 +317,15 @@ DeferredActionQueues.prototype = {
   }
 };
 
-function Queue(name) {
+function Queue(name, options) {
   this.name = name;
+  this.options = options;
   this._queue = [];
 }
 
 Queue.prototype = {
   name: null,
+  options: null,
   _queue: null,
 
   push: function(target, method, args, stack) {
@@ -346,6 +357,7 @@ Queue.prototype = {
     return {queue: this, action: action};
   },
 
+  // remove me, only being used for Ember.run.sync
   flush: function() {
     var queue = this._queue,
         action, target, method, args;
