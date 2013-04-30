@@ -62,7 +62,7 @@ Backburner.prototype = {
       if (this.previousInstance) {
         this.currentInstance = this.previousInstance;
         this.previousInstance = null;
-      }      
+      }
     }
   },
 
@@ -234,7 +234,7 @@ function executeTimers(self) {
       break;
     }
   }
-  
+
   fns = timers.splice(0, i);
   console.log(now, fns);
 
@@ -260,7 +260,7 @@ DeferredActionQueues = function(queueNames, options) {
   var queueName;
   for (var i = 0, l = queueNames.length; i < l; i++) {
     queueName = queueNames[i];
-    queues[queueName] = new Queue(queueName, options[queueName]);
+    queues[queueName] = new Queue(this, queueName, options[queueName]);
   }
 };
 
@@ -284,46 +284,56 @@ DeferredActionQueues.prototype = {
   },
 
   flush: function() {
-    // TODO: rewrite this
-    while(!this.next()) {}
-  },
-
-  next: function() {
-    // Run first encountered item from first non empty queue.
     var queues = this.queues,
         queueNames = this.queueNames,
-        queueName, queue;
+        queueName, queue, priorQueueIndex,
+        queueIndex = 0, numberOfQueues = queueNames.length;
 
-    for (var i = 0, l = queueNames.length; i < l; i++) {
-      queueName = queueNames[i];
+    outerloop:
+    while (queueIndex < numberOfQueues) {
+      queueName = queueNames[queueIndex];
       queue = queues[queueName];
 
-      var action = queue.shift();
-      if (!action) { continue; }
+      var options = queue.options,
+          before = options && options.before,
+          after = options && options.after,
+          action, target, method, args,
+          actionIndex = 0, numberOfActions = queue._queue.length;
 
-      var target = action[0],
-          method = action[1],
-          args   = action[2];
+      if (numberOfActions && before) { before(); }
+      while (actionIndex < numberOfActions) {
+        action = queue.shift();
+        target = action[0];
+        method = action[1];
+        args   = action[2];
 
-      if (typeof method === 'string') {
-        method = target[method];
+        if (typeof method === 'string') { method = target[method]; }
+
+        method.apply(target, args);
+
+        actionIndex++;
+      }
+      if (numberOfActions && after) { after(); }
+
+      if ((priorQueueIndex = queue.priorQueueWithActions()) !== -1) {
+        queueIndex = priorQueueIndex;
+        continue outerloop;
       }
 
-      method.apply(target, args);
-
-      return false;
+      queueIndex++;
     }
-    return true;
   }
 };
 
-function Queue(name, options) {
+function Queue(daq, name, options) {
+  this.daq = daq;
   this.name = name;
   this.options = options;
   this._queue = [];
 }
 
 Queue.prototype = {
+  daq: null,
   name: null,
   options: null,
   _queue: null,
@@ -360,21 +370,23 @@ Queue.prototype = {
   // remove me, only being used for Ember.run.sync
   flush: function() {
     var queue = this._queue,
-        action, target, method, args;
+        options = this.options,
+        before = options && options.before,
+        after = options && options.after,
+        action, target, method, args, i, l;
 
-    for (var i = 0; i < queue.length; i++) {
+    if (before) { before(); }
+    for (i = 0; i < queue.length; i++) {
       action = queue[i];
       target = action[0];
       method = action[1];
       args   = action[2];
 
-      try {
-        method.apply(target, args);
-      } catch(e) {
-
-      }
+      method.apply(target, args);
     }
+    if (after) { after(); }
 
+    // FIXME: if length is 0, don't recreate array
     this._queue = [];
   },
 
@@ -389,5 +401,19 @@ Queue.prototype = {
         return;
       }
     }
+  },
+
+  priorQueueWithActions: function() {
+    var daq = this.daq,
+        currentQueueIndex = daq.queueNames.indexOf(this.name),
+        queueName, queue;
+
+    for (var i = 0, l = currentQueueIndex; i <= l; i++) {
+      queueName = daq.queueNames[i];
+      queue = daq.queues[queueName];
+      if (queue._queue.length) { return i; }
+    }
+
+    return -1;
   }
 };

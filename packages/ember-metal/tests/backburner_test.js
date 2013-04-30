@@ -113,12 +113,12 @@ test("actions scheduled on previous queue, start over from beginning", function(
       equal(step++, 1, "1");
 
       bb.schedule('one', null, function() {
-        equal(step++, 2, "2");
+        equal(step++, 3, "3");
       });
     });
 
     bb.schedule('two', null, function() {
-      equal(step++, 3, "3");
+      equal(step++, 2, "2");
     });
   });
 
