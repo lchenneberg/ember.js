@@ -12,8 +12,8 @@ X coalesce laters/nexts
 X cancel
 X string methods
 X hasScheduledTimers
-- better waterfall implementation - cache length, check prior, then compare new length and rerun
-- ability to wrap flushes (options) - queue.aroundFlush = Ember.changeProperties
+X better waterfall implementation - cache length, check prior, then compare new length and rerun
+X ability to wrap flushes (options) - queue.aroundFlush = Ember.changeProperties
 == TESTS WILL PASS ==
 - cancel debounces?
 - don't create arrays for actions, push a tuple
@@ -114,8 +114,6 @@ Backburner.prototype = {
   },
 
   later: function() {
-    console.log('later', arguments);
-
     var self = this,
         wait = pop.call(arguments),
         target = arguments[0],
@@ -139,7 +137,6 @@ Backburner.prototype = {
       if (executeAt < timers[i]) { break; }
     }
 
-    console.log(target, method, args, i, executeAt);
     var fn = function() {
       method.apply(target, args);
     };
@@ -225,7 +222,6 @@ function executeTimers(self) {
       time, fn, fns, i, l;
 
   self.begin();
-  console.log(timers);
 
   // TODO: binary search
   for (i = 0, l = timers.length; i < l; i += 2) {
@@ -236,7 +232,6 @@ function executeTimers(self) {
   }
 
   fns = timers.splice(0, i);
-  console.log(now, fns);
 
   for (i = 1, l = fns.length; i < l; i += 2) {
     fn = fns[i];
@@ -269,8 +264,6 @@ DeferredActionQueues.prototype = {
   queues: null,
 
   schedule: function(queueName, target, method, args, onceFlag, stack) {
-    console.log('schedule', arguments);
-
     var queues = this.queues,
         queue = queues[queueName];
 
